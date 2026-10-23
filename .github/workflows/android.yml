@@ -1,0 +1,64 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build APK
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          BASE="${API_BASE_URL:-https://lanflash-api.example.com}"
+          ARGS="-PapiBaseUrl=$BASE -PlicenseSecret=${LICENSE_SECRET:-}"
+
+          if [ -n "${KEYSTORE_B64:-}" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            ARGS="$ARGS -PreleaseStoreFile=$RUNNER_TEMP/release.jks"
+            ARGS="$ARGS -PreleaseStorePassword=$STORE_PASSWORD"
+            ARGS="$ARGS -PreleaseKeyAlias=$KEY_ALIAS"
+            ARGS="$ARGS -PreleaseKeyPassword=$KEY_PASSWORD"
+            ./gradlew $ARGS :app:assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk LanFlash-Android.apk
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 未配置，输出可安装的 debug 签名 APK"
+            ./gradlew $ARGS :app:assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk LanFlash-Android.apk
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LanFlash-APK
+          path: LanFlash-Android.apk
+          if-no-files-found: error
+
+      - name: Attach APK to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LanFlash-Android.apk

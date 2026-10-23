@@ -1,0 +1,62 @@
+name: LanFlash
+options:
+  bundleIdPrefix: com.lanflash
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Manual
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+targets:
+  LanFlash:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleDisplayName: 闪电传
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: zh_CN
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
+        NSLocalNetworkUsageDescription: 需要访问本地网络，才能在同一 Wi-Fi 下与其他设备直接传输文件。
+        NSCameraUsageDescription: 需要使用相机扫描配对二维码。
+        NSPhotoLibraryUsageDescription: 需要访问相册以选择要发送的照片或视频。
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+        API_BASE_URL: $(API_BASE_URL)
+        LICENSE_SECRET: $(LICENSE_SECRET)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.lanflash.app
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        API_BASE_URL: https://lanflash-api.example.com
+        LICENSE_SECRET: ""
+        CODE_SIGN_IDENTITY: "Apple Development"
+        PROVISIONING_PROFILE_SPECIFIER: ""
+    scheme:
+      testTargets: []
+      gatherCoverageData: false
+    dependencies:
+      - sdk: Network.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreImage.framework

@@ -1,0 +1,17 @@
+{
+  "name": "lanflash-license-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Activation / license service for LanFlash",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "keygen": "node src/cli.mjs keygen",
+    "gen": "node src/cli.mjs gen",
+    "list": "node src/cli.mjs list",
+    "revoke": "node src/cli.mjs revoke"
+  }
+}

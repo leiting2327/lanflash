@@ -1,0 +1,36 @@
+# Gradle / Android
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Android artifacts
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# iOS
+ios/build/
+ios/DerivedData/
+ios/LanFlash.xcodeproj/
+ios/Support/Info.plist
+*.ipa
+*.xcarchive
+xcuserdata/
+*.xcuserstate
+.DS_Store
+
+# Server
+server/node_modules/
+server/data/
+server/.env
+
+# OS / editors
+*.log
+.vscode/

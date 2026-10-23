@@ -1,0 +1,115 @@
+name: iOS IPA
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ipa:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build IPA
+        working-directory: ios
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          LICENSE_SECRET: ${{ secrets.LICENSE_SECRET }}
+          CERT_B64: ${{ secrets.IOS_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+          PROFILE_B64: ${{ secrets.IOS_PROVISION_BASE64 }}
+          PROFILE_NAME: ${{ secrets.IOS_PROFILE_NAME }}
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+          EXPORT_METHOD: ${{ secrets.IOS_EXPORT_METHOD }}
+        run: |
+          set -euo pipefail
+          BASE="${API_BASE_URL:-https://lanflash-api.example.com}"
+          BUNDLE="${BUNDLE_ID:-com.lanflash.app}"
+          SECRET="${LICENSE_SECRET:-}"
+
+          if [ -z "${CERT_B64:-}" ]; then
+            echo "::warning::IOS_CERT_P12_BASE64 未配置，产出未签名 IPA（需用 Sideloadly/AltStore 自签安装）"
+            xcodebuild -project LanFlash.xcodeproj -scheme LanFlash -configuration Release \
+              -sdk iphoneos -derivedDataPath build/dd build \
+              CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+              PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE" \
+              API_BASE_URL="$BASE" LICENSE_SECRET="$SECRET"
+
+            mkdir -p build/Payload
+            cp -R build/dd/Build/Products/Release-iphoneos/LanFlash.app build/Payload/
+            (cd build && zip -qry "$GITHUB_WORKSPACE/LanFlash-iOS-unsigned.ipa" Payload)
+          else
+            KEYCHAIN="$RUNNER_TEMP/sign.keychain-db"
+            KEYCHAIN_PASSWORD="$(uuidgen)"
+            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN"
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+            python3 -c "import sys,base64; sys.stdout.buffer.write(base64.b64decode(sys.stdin.read()))" <<< "$CERT_B64" > "$RUNNER_TEMP/cert.p12"
+            security import "$RUNNER_TEMP/cert.p12" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+            security list-keychain -d user -s "$KEYCHAIN"
+
+            mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+            python3 -c "import sys,base64; sys.stdout.buffer.write(base64.b64decode(sys.stdin.read()))" <<< "$PROFILE_B64" > "$HOME/Library/MobileDevice/Provisioning Profiles/lanflash.mobileprovision"
+
+            cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>${EXPORT_METHOD:-development}</string>
+            <key>teamID</key>
+            <string>$TEAM_ID</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>compileBitcode</key>
+            <false/>
+            <key>stripSwiftSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
+            xcodebuild -project LanFlash.xcodeproj -scheme LanFlash -configuration Release \
+              -sdk iphoneos -archivePath build/LanFlash.xcarchive archive \
+              DEVELOPMENT_TEAM="$TEAM_ID" \
+              PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE" \
+              CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY="Apple Development" \
+              PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+              API_BASE_URL="$BASE" LICENSE_SECRET="$SECRET"
+
+            xcodebuild -exportArchive -archivePath build/LanFlash.xcarchive \
+              -exportPath build/export \
+              -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+              -allowProvisioningUpdates
+
+            cp build/export/*.ipa "$GITHUB_WORKSPACE/LanFlash-iOS.ipa"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LanFlash-IPA
+          path: LanFlash-iOS*.ipa
+          if-no-files-found: error
+
+      - name: Attach IPA to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LanFlash-iOS*.ipa
